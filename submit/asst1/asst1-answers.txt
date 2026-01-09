@@ -1,0 +1,393 @@
+step 4:
+
+1. sys161: System/161 release 2.0.3, compiled Sep 17 2022 09:27:01
+
+OS/161 base system version 1.99.08
+Copyright (c) 2000, 2001-2005, 2008-2011, 2013, 2014
+   President and Fellows of Harvard College.  All rights reserved.
+
+Put-your-group-name-here's system version 0 (DUMBVM #1)
+
+292k physical memory available
+Device probe...
+lamebus0 (system main bus)
+emu0 at lamebus0
+ltrace0 at lamebus0
+ltimer0 at lamebus0
+beep0 at ltimer0
+rtclock0 at ltimer0
+lrandom0 at lamebus0
+random0 at lrandom0
+lhd0 at lamebus0
+lhd1 at lamebus0
+lser0 at lamebus0
+con0 at lser0
+
+cpu0: MIPS/161 (System/161 2.x) features 0x0
+OS/161 kernel [? for menu]:
+
+
+
+2. nmaleki@ssh-linux4:~/cpen331/individual-nmaleki$ git log
+commit 5d69daa849b6c9569a8e5bfbd2e067fe2d299a82 (HEAD -> master, tag: asst1-start, origin/master, origin/HEAD)
+Author: Nami Maleki <namimaleki13@gmail.com>
+Date:   Mon Sep 8 18:38:23 2025 -0700
+
+
+3. nmaleki@ssh-linux4:~/cpen331/individual-nmaleki$ git tag
+asst1-start
+
+
+STEP 5
+
+1. 
+You can find the code that is in OS/161 code that is executed when a trap occurs at this path:
+nmaleki@ssh-linux3:~/cpen331/individual-nmaleki/kern/arch/mips/locore/exception-mip1.S.
+Inside exception-mip1.S first the exception vector is handled either through “mips_general_handler” or “mips_utlb_handler” depending on what type of exception it is (lines 68 and 86).
+Afterwards go through “j common_exception” (line 69, 87) where the trap frame is created (save the cpu state) by saving the registers. Then the code calls c handler “mips_trap(struct trapframe *tf” with the trap frame. This is when we transfer over to the c code inside of trap.c in “/kern/arch/mips/locore/trap.c”
+trap.c contains the trap handling code. The handler logic figures out whether the trap is a sys call, exception or hardware interrupt and dispatches them accordingly.
+In the handler system calls will be dispatched to syscall() with the trapframe, VM faults will be sent to vm_fault, the handler handles the exceptions or goes into “panic”.
+
+Interrupts are different from traps since traps are caused by the current process and reflect an event caused by the program, for example a request of system call or tlb miss, bad instructions, etc. Whereas interrupts are caused by devices and may not be related to the currently running process. 
+
+In our case interrupts will also arrive via the exception vector but they are distinguished since they are marked as EX_IRQ and they are sent to the same handler trap.c but from there are dispatched to mainbus_interrupt(tf) where they will properly be handled.
+
+
+2.
+It can be found in “userland/lib/libc/arch/mips/syscalls-mips.S”. It is on lines 84-92.
+
+3.
+Because some libc functions are needed by the user programs and the kernel hence they are in common/libc. The rest, which depend on sys calls, are in userland/lib/libc for user programs only
+
+4.Ostree
+Debug
+It could be invalidated if the source tree is changed.
+
+
+5. 
+A function is considered machine dependent if it accesses and manipulates registers or relies on hardware dets and instructinos. It’s important to maintain this separation because of a few reasons. 1. Modularity/organization 2. I’d assume it’s much more efficient for maintenance aswell. 
+
+6. Looking at the comments of exception-mips1.S at line 133 we are told that the trapframe stores 37 words “Allocate stack space for 37 words to hold the trap frame”. Additionally we can find the struct for the trap frame under include in mips:
+struct trapframe {
+    uint32_t tf_vaddr;  /* coprocessor 0 vaddr register */
+    uint32_t tf_status; /* coprocessor 0 status register */
+    uint32_t tf_cause;  /* coprocessor 0 cause register */
+    uint32_t tf_lo;
+    uint32_t tf_hi;
+    uint32_t tf_ra;     /* Saved register 31 */
+    uint32_t tf_at;     /* Saved register 1 (AT) */
+    uint32_t tf_v0;     /* Saved register 2 (v0) */
+    uint32_t tf_v1;     /* etc. */
+    uint32_t tf_a0;
+    uint32_t tf_a1;
+    uint32_t tf_a2;
+    uint32_t tf_a3;
+    uint32_t tf_t0;
+    uint32_t tf_t1;
+    uint32_t tf_t2;
+    uint32_t tf_t3;
+    uint32_t tf_t4;
+    uint32_t tf_t5;
+    uint32_t tf_t6;
+    uint32_t tf_t7;
+    uint32_t tf_s0;
+    uint32_t tf_s1;
+    uint32_t tf_s2;
+    uint32_t tf_s3;
+    uint32_t tf_s4;
+    uint32_t tf_s5;
+    uint32_t tf_s6;
+    uint32_t tf_s7;
+    uint32_t tf_t8;
+    uint32_t tf_t9;
+    uint32_t tf_k0;     /* dummy (see exception-mips1.S comments) */
+    uint32_t tf_k1;     /* dummy */
+    uint32_t tf_gp;
+    uint32_t tf_sp;
+    uint32_t tf_s8;
+    uint32_t tf_epc;    /* coprocessor 0 epc register */
+};
+
+
+37 * 4 bytes (uint32_t) = 148 bytes 
+31 of these registers are cpu registers, 4 coprocessor registers (vaddr, status, cause, epc), and 2 div registers (lo and hi). S
+
+
+7. kern/conf/config is a script that sets up the kernel build environment based on the chosen configuration. It reades configuration files and generates the necessary Makefiles, header files, and include paths so that the kernel can be compiled correctly. With that said you should re run it whenever something changes that has an effect on how the kernel is built or configured. This includes adding new files or any modifications to the build options.
+
+
+8. 
+Bmake depend recalculates the dependencies between source files, so the Makefile knows which files need to be recompiled. It prevents building errors or use of outdated object files. Hence you should run it wherever you’ve added, removed, or modified source or header files in DUMBVM. 
+
+
+9. Run if there have been changes made to the kernel source code.
+bmake compiles and bmake install cpies the recompiled kernel into the right location.
+
+
+10. 
+We want to add a kernel command hence we go under kernel then under main which contains the code that helps initialize and interact with the kernel after it boots. Then menu.c contains all the code that handles the kernel commands. 
+We need to create a new function that defines the action the command performs.
+Additionally, we need to add this command in the command table which links a typed string to that function.
+Looking at the other function in menu.c we can see that every command is in this form: 
+Static int cmd_name (int nargs, char **args) where nargs is the number of arguments typed at the prompt and argos is the array of strings.
+
+The kernel doesn’t automatically know about functions it only knows about the strings typed at prompt so the function call is made via the command table “cmdtable” in menu.c. cmdtable is an array of {name, function} pairs so we can first add our function then add key word and function name in the cmd table.
+Our function can be like: 
+static int cmd_hellowwrld(int nargs, char **args) {
+	void (nargs) // ignore unused arguments
+	void (args) //silence compiler warnings
+kprintf(“Hello world!\n);
+return 0; 
+}
+
+And then in the cmd table we can add something like {“hello”, cmdhellowrld}.
+
+
+
+11. Well we can’t use the standard utilities from our host machine because they are built for a different CPU and different operating system. Thereby, OS/161 needs these directories since they provide the right environment for compiling and running programs inside OS/161. 
+
+
+12. If you look under /userland/lib/crt0/mips/crt0.S as stated in the documentation this is the code that gets invoked by the kernel before main() and regains control after main. Once main finishes it returns a value in register v0. Then crt0.S takes the return value and copies it into s0 (which is callee-save) so we still have the value in case exit() returns and also moves it to a0 (first arg register) and calls the C library’s exit() function (which is a wrapper that eventually calls the _exit system call stub which makes a trap into the kernel and the kernel cleans up the process and records the exit status for the partent).   
+
+
+13. First we assign a new and unique syscall number for our system cal and add it to kern/include/kern/syscall.h. This is because every system call is identified by a unique number and when the user program executes a syscall instruction, the kernel figures out which syscall the program wants through this number which allows it to figure out which function to call. 
+Then this number is taken and is directed to the correct kernel function. We can add the code for this inside /kern/arch/mips/syscall/syscall.c which is the system call dispatcher. Inside here we’d modify the case statement by adding a new case for our syscall directing to the kernel function.
+Afterwards we need to make sure the compiler knows that this kernel function exists and we can do that inside kern/include/syscall.h by adding a prototype for our function. This way the dispatcher knows the function exists and how to call it.
+Now we can implement the actual functionality of the syscall. If we look under kern/syscall/ this is where the functionality of the other syscalls have been implemented.
+
+After run bmake depend, bmake, and bmake install for the kernel. 
+
+14. Very first function is in kern/arch/mips/locore/sys161/main/start.S and it is _start.
+
+
+15. Looking at the top of _start in start.S, the first instruction is addiu sp, sp, -24
+
+16. (gdb) break kmain
+Breakpoint 1 at 0x800139e4: file ../../main/main.c, line 211.
+(gdb) break menu
+Breakpoint 2 at 0x80014a0c: file ../../main/menu.c, line 697.
+(gdb) info breakpoints
+Num     Type           Disp Enb Address    What
+1       breakpoint     keep y   0x800139e4 in kmain at ../../main/main.c:211
+2       breakpoint     keep y   0x80014a0c in menu at ../../main/menu.c:697
+(gdb)
+
+
+17. The system sets up the stack and saves the return address. 
+The boot string is copied into memory.
+Exception handlers are prepared (code for them is copied into mem)
+The system initializes memory and the cpu state. 
+And then control is passed onto the C code
+
+18.Jal kmain
+
+19. The functions are:
+ram_bootstrap()
+proc_bootstrap()
+thread_bootstrap()
+hardclock_bootstrap()
+vfs_bootstrap()
+kheap_nextgeneration() 
+mainbus_bootstrap()
+vm_bootstrap()
+kprintf_bootstrap()
+thread_start_cpus()
+vfs_setbootfs("emu0")
+
+GDB output: 
+Breakpoint 1, boot () at ../../main/main.c:99
+99              kprintf("\n");
+(gdb) next
+100             kprintf("OS/161 base system version %s\n", BASE_VERSION);
+(gdb) next
+101             kprintf("%s", harvard_copyright);
+(gdb) next
+102             kprintf("\n");
+(gdb) next
+104             kprintf("Put-your-group-name-here's system version %s (%s #%d)\n",
+(gdb) next
+106             kprintf("\n");
+(gdb) next
+109             ram_bootstrap();
+(gdb) step
+ram_bootstrap () at ../../arch/mips/vm/ram.c:51
+51              ramsize = mainbus_ramsize();
+(gdb) finish
+Run till exit from #0  ram_bootstrap () at ../../arch/mips/vm/ram.c:51
+boot () at ../../main/main.c:110
+110             proc_bootstrap();
+(gdb) step
+proc_bootstrap () at ../../proc/proc.c:181
+181             kproc = proc_create("[kernel]");
+(gdb) finish
+Run till exit from #0  proc_bootstrap () at ../../proc/proc.c:181
+boot () at ../../main/main.c:111
+111             thread_bootstrap();
+(gdb) step
+thread_bootstrap () at ../../thread/thread.c:357
+357             cpuarray_init(&allcpus);
+(gdb) finish
+Run till exit from #0  thread_bootstrap () at ../../thread/thread.c:357
+boot () at ../../main/main.c:112
+112             hardclock_bootstrap();
+(gdb) step
+hardclock_bootstrap () at ../../thread/clock.c:68
+68              spinlock_init(&lbolt_lock);
+(gdb) finish
+Run till exit from #0  hardclock_bootstrap () at ../../thread/clock.c:68
+boot () at ../../main/main.c:113
+113             vfs_bootstrap();
+(gdb) step
+vfs_bootstrap () at ../../vfs/vfslist.c:101
+101             knowndevs = knowndevarray_create();
+(gdb) finish
+Run till exit from #0  vfs_bootstrap () at ../../vfs/vfslist.c:101
+boot () at ../../main/main.c:114
+114             kheap_nextgeneration();
+(gdb) step
+kheap_nextgeneration () at ../../vm/kmalloc.c:708
+708     }
+(gdb) finish
+Run till exit from #0  kheap_nextgeneration () at ../../vm/kmalloc.c:708
+boot () at ../../main/main.c:117
+117             kprintf("Device probe...\n");
+(gdb) next
+118             KASSERT(curthread->t_curspl > 0);
+(gdb) next
+119             mainbus_bootstrap();
+(gdb) step
+mainbus_bootstrap () at ../../arch/sys161/dev/lamebus_machdep.c:89
+89              KASSERT(curthread->t_curspl > 0);
+(gdb) finish
+Run till exit from #0  mainbus_bootstrap ()
+    at ../../arch/sys161/dev/lamebus_machdep.c:89
+boot () at ../../main/main.c:120
+120             KASSERT(curthread->t_curspl == 0);
+(gdb) next
+122             pseudoconfig();
+(gdb) next
+123             kprintf("\n");
+(gdb) next
+124             kheap_nextgeneration();
+(gdb) step
+kheap_nextgeneration () at ../../vm/kmalloc.c:708
+708     }
+(gdb) finish
+Run till exit from #0  kheap_nextgeneration () at ../../vm/kmalloc.c:708
+boot () at ../../main/main.c:127
+127             vm_bootstrap();
+(gdb) step
+vm_bootstrap () at ../../arch/mips/vm/dumbvm.c:70
+70      }
+(gdb) finish
+Run till exit from #0  vm_bootstrap () at ../../arch/mips/vm/dumbvm.c:70
+boot () at ../../main/main.c:128
+128             kprintf_bootstrap();
+(gdb) step
+kprintf_bootstrap () at ../../lib/kprintf.c:66
+66              KASSERT(kprintf_lock == NULL);
+(gdb) finish
+Run till exit from #0  kprintf_bootstrap () at ../../lib/kprintf.c:66
+boot () at ../../main/main.c:129
+129             thread_start_cpus();
+(gdb) step
+thread_start_cpus () at ../../thread/thread.c:430
+430             cpu_identify(buf, sizeof(buf));
+(gdb) finish
+Run till exit from #0  thread_start_cpus () at ../../thread/thread.c:430
+boot () at ../../main/main.c:132
+132             vfs_setbootfs("emu0");
+(gdb) step
+vfs_setbootfs (fsname=0x8002fbd4 "emu0") at ../../vfs/vfslookup.c:78
+78              vfs_biglock_acquire();
+(gdb) finish
+Run till exit from #0  vfs_setbootfs (fsname=0x8002fbd4 "emu0")
+    at ../../vfs/vfslookup.c:78
+boot () at ../../main/main.c:134
+134             kheap_nextgeneration();
+Value returned is $1 = 0
+(gdb) step
+kheap_nextgeneration () at ../../vm/kmalloc.c:708
+708     }
+(gdb) finish
+Run till exit from #0  kheap_nextgeneration () at ../../vm/kmalloc.c:708
+boot () at ../../main/main.c:141
+141     }
+(gdb) next
+kmain (arguments=0x80035c20 "") at ../../main/main.c:213
+213             menu(arguments);
+(gdb) next
+
+
+20. 
+
+(gdb) break thread_bootstrap
+Breakpoint 1 at 0x8001fa98: file ../../thread/thread.c, line 357.
+(gdb) continue
+Continuing.
+
+Breakpoint 1, thread_bootstrap () at ../../thread/thread.c:357
+357             cpuarray_init(&allcpus);
+(gdb) print *bootcpu
+Cannot access memory at address 0x80000
+(gdb)
+
+
+21. (gdb) next
+367             bootcpu = cpu_create(0);
+(gdb) next
+368             bootthread = bootcpu->c_curthread;
+(gdb) print *bootcpu
+$1 = {c_self = 0x8003af00, c_number = 0, c_hardware_number = 0,
+  c_curthread = 0x8003bf80, c_zombies = {tl_head = {tln_prev = 0x0,
+      tln_next = 0x8003af1c, tln_self = 0x0}, tl_tail = {
+      tln_prev = 0x8003af10, tln_next = 0x0, tln_self = 0x0}, tl_count = 0},
+  c_hardclocks = 0, c_spinlocks = 0, c_isidle = false, c_runqueue = {
+    tl_head = {tln_prev = 0x0, tln_next = 0x8003af44, tln_self = 0x0},
+    tl_tail = {tln_prev = 0x8003af38, tln_next = 0x0, tln_self = 0x0},
+    tl_count = 0}, c_runqueue_lock = {splk_lock = 0, splk_holder = 0x0},
+  c_ipi_pending = 0, c_shootdown = {{ts_placeholder = 0} <repeats 16 times>},
+  c_numshootdown = 0, c_ipi_lock = {splk_lock = 0, splk_holder = 0x0}}
+(gdb)
+
+
+22. 
+(gdb) break kmain
+Note: breakpoint 1 also set at pc 0x800139e4.
+Breakpoint 2 at 0x800139e4: file ../../main/main.c, line 211.
+(gdb) continue
+Continuing.
+
+Breakpoint 1, kmain (arguments=0x80035c20 "") at ../../main/main.c:211
+211             boot();
+(gdb) cpuarray allcpus
+0 cpus
+(gdb)
+
+
+
+23.
+__start () at ../../arch/sys161/main/start.S:54
+54      ../../arch/sys161/main/start.S: No such file or directory.
+(gdb) break menu
+Breakpoint 1 at 0x80014a0c: file ../../main/menu.c, line 697.
+(gdb) continue
+Continuing.
+
+Breakpoint 1, menu (args=0x80035c20 "") at ../../main/menu.c:697
+697             menu_execute(args, 1);
+(gdb) cpuarray allcpus
+1 cpus
+cpu 0:
+$1 = {c_self = 0x8003af00, c_number = 0, c_hardware_number = 0,
+  c_curthread = 0x8003bf80, c_zombies = {tl_head = {tln_prev = 0x0,
+      tln_next = 0x8003af1c, tln_self = 0x0}, tl_tail = {
+      tln_prev = 0x8003af10, tln_next = 0x0, tln_self = 0x0}, tl_count = 0},
+  c_hardclocks = 1, c_spinlocks = 0, c_isidle = false, c_runqueue = {
+    tl_head = {tln_prev = 0x0, tln_next = 0x8003af44, tln_self = 0x0},
+    tl_tail = {tln_prev = 0x8003af38, tln_next = 0x0, tln_self = 0x0},
+    tl_count = 0}, c_runqueue_lock = {splk_lock = 0, splk_holder = 0x0},
+  c_ipi_pending = 0, c_shootdown = {{ts_placeholder = 0} <repeats 16 times>},
+  c_numshootdown = 0, c_ipi_lock = {splk_lock = 0, splk_holder = 0x0}}
+(gdb)
+

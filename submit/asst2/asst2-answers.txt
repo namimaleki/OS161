@@ -1,0 +1,68 @@
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          Assignment 2
+1. THREAD EXIT
+The thread exit function is in /kern/thread/thread.c. When this function is called it marks the thread as a zombie process, and then the parts of the thread that the program doesn’t need to run are cleaned up right away and the rest is later freed by another thread via a call to the exorcise() function. At line 777 in thread.c we can analyze the execution: 
+The thread is detached from the process this is achieved through proc_remthread.
+Then interrupts are disabled for the thread that is being exited 
+Afterwards the thread is marked as a zombie process and a context switch is provoked via the thread_switch function. 
+Then the rest of the threads resources are deallocated and cleaned up when exorcise() is called (which calls thread_destroy() on all zombie threads). 
+
+
+THREAD SLEEP
+With thread sleep the thread isn’t killed but just put in a queue and wait’s until it is woken up. In order to put a thread to sleep a thread calls wchan_sleep() where inside wchan_sleep() a call is made to thread_switch() marking the threads state as S_SLEEP. See the execution process below:
+Once wchan_sleep(wc, lk) is called then we call thread_switch(S_SLEEP, wc, lk)
+Inside thread_switch the thread is enqueued onto the wait channel while holding the channel’s spinlock. And once the thread is enqueued this spinlock is released.
+The thread remains in the wchan until another thread wakes it with wchan_wakeone() which calls thread_make_runnable() to remove the thread from the channel and release its spinlock.
+
+2. INside /kern/thread/thread.c. thread_switch() which is the high level function that handles the switch and switchframe_switch() which is inside thread_switch and does the saving of registers and switching frame.
+
+3. The following can be found in /kern/include/thread.h
+S_RUN : The thread is currently executing. A CPU can only run one thread so this state can only be assigned to one thread at a time.
+S_READY: It’s in the name (the thread is ready but not running). As soon as the CPU is available a ready thread will transition to S_RUN.
+S_SLEEP: As explained in q1 if a thread is sleeping it is in a queue waiting for some event to occur this could be a lock or a condition variable for ex. It will stay asleep until another thread wakes it up.
+S_ZOMBIE: This is when a thread finished execution (thread_exit). At this point the thread can’t run anymore and it’s resources will get cleaned up by the kernel.
+
+
+4. Turning interrutps off Prevents the CPU from being interrupted during execution.
+This can be accomplished via the spl functions (acronym for set priority level). splhigh() disables interrupts this basically sets the current running thread to highest priority as it can’t be interrupted.
+    1 - spl0() – enables all interrupts.
+    2 - splhigh() – raises to the highest IPL, disables all interrupts.
+    3 - splx(s) – restores interrupts to a saved level s.
+
+- This is important because operations like context switches, enqueuing and dequeing threads, or changing thread states, changing from one thread to another need to be done safely and atomicly and if interrupts were allowed this would lead to a lot of trouble.
+
+
+
+5. When a thread wakes up another thread it essentially changes the state of the asleep thread to runnable so the thread can run again.
+Here is the process:
+A thread calls wchan_wakeon() or wchan_wakeall() (wakes up all sleeping threads) and then the kernel removes the sleeping thread or all from the wait channel’s queue (struct wchan), and then it calls thread_make_runnable() on each thread which changes the states of the sleeping thread or threads from S_SLEEP to S_READY and places them in the run queue.
+
+After they are placed on the run queue, the scheduler will go through the run queue and execute the threads on the queue. Once picked up the thread will resume execution right after its call to wchan_sleep.
+
+
+6.
+/kern/thread/thread.c at line 560 we have the main function thread_switch and this function is the main function that handles switching between threads.
+thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
+Inside thread_switch the actual function that picks the next thread from the CPUs run queue is threadlist_remhead(&curcpu->c_runqueue) and can be found at kern/thread/thread.c line 640:
+curcpu->c_isidle = true;
+    do {
+        next = threadlist_remhead(&curcpu->c_runqueue);
+        if (next == NULL) {
+            spinlock_release(&curcpu->c_runqueue_lock);
+            cpu_idle();
+            spinlock_acquire(&curcpu->c_runqueue_lock);
+        }
+    } while (next == NULL);
+    curcpu->c_isidle = false;
+
+7. As it can be seen in the code pasted in q6 the next thread is picked by dequeuing the first thread (it’s in the name remhead means remove the head (threads are added at the tail of the queue)) from the run queue. Additionally, schedule() could be used but its not implemented.
+
+8. The hardware timer produces periodic interrupts. This is useful as it prevents threads from hogging the CPU to themselves and ensures that the kernel regains control from user or kernel threads, and allows for fair time sharing amongs the threads.
+On a timer interrupt under kern/thread/clock.c at line 93 hardclock() is called.
+
+
+9. The explanation below can be better understood by looking at the code under /kern/thread/synch.c
+A semaphore is a tool that the os uses to control how many threads can use something at the same time. It is implemented through counters; it has a counter that decremenets when a thread enters (P()) and increments when a thread leaves (V()). If the counter is greater than zero, a thread can keep going. But once the counter has reached 0 then the thread can no longer continue so it goes to sleep (through wchan_sleep()). When a another thread calls V() it increases the counter. If any threads are waiting, wchan_wakeone() is called to wake up one of them. So wchan_sleep() is how a semaphore makes threads wait when resources are not available and wchan_wakeone() is how it wakes them when resources become available.
+
+
+10. If you look at the code in thread.c at around line 950 is when all the wchan functions are implemented. If we focus on wchan_sleep() and wchan_wakeone() you can notice that they both require the same spinlock ‘lk’. This ensures that a wakeup can only happen before or after a thread goes to sleep, hence preventing a thread from missing a wakeup. So in short the same lock for both the functions is used which prevents race condition.
+
